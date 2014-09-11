@@ -53,7 +53,7 @@ class MRLR(ClassifierMixin):
     indicator regression tasks.
 
     Ting, K.M., Witten, I.H.: Issues in stacked generalization.
-    Journal of Artificial Intelligence Research 10, 271–289 (1999)
+
     """
     def __init__(self, regressor, stackingc, **kwargs):
         self.estimator_ = regressor
@@ -195,7 +195,7 @@ class Stacking(object):
     #       when trying new stacking methods.
 
     def __init__(self, meta_estimator, estimators,
-                 cv, raw = False, stackingc=True, proba=True,
+                 cv, raw = False, stackingc=False, proba=True,
                  **kwargs):
         self.estimators_ = estimators
         self.n_estimators_ = len(estimators)
@@ -281,7 +281,7 @@ class Stacking(object):
         """
         rows = []
         for index in range(len(self.estimators_)):
-            j,e = self.estimators_[index] 
+            e = self.estimators_[index] 
             X = X_array[index]
             if self.proba_:
                 # Predict label probabilities
@@ -325,9 +325,9 @@ class Stacking(object):
 
             # Fit each base estimator using the training set for the fold.
             for index in range(len(self.estimators_)):
-                j,e = self.estimators_[index]  
+                e = self.estimators_[index]  
                 X_a = X_a_array[index]
-                print '  Training base (level-0) estimator %d...' % (j),
+                print '  Training base (level-0) estimator...',
                 e.fit(X_a, y_a)
                 print 'done.'
 
@@ -353,7 +353,7 @@ class Stacking(object):
             e.fit(X, y)
             print 'done.'
 
-    def predict(self, X):
+    def predict(self, X_raw):
         """ Predict label values with the fitted estimator on 
         predictor(s) X.
 
@@ -362,10 +362,14 @@ class Stacking(object):
         array of shape = [n_samples]
             The predicted label values of the input samples.
         """
-        X_meta = self._make_meta(X)
+        if(self.raw_):
+            X_array = [est.transform(X_raw) for est in self.estimators_]  ## space inefficient
+        else :
+            X_array = [X_raw for est in self.estimators_]
+        X_meta = self._make_meta(X_array)
         return self.meta_estimator_.predict(X_meta)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X_raw):
         """ Predict label probabilities with the fitted estimator 
         on predictor(s) X.
 
@@ -374,7 +378,12 @@ class Stacking(object):
         array of shape = [n_samples]
             The predicted label probabilities of the input samples.
         """
-        X_meta = self._make_meta(X)
+        
+        if(self.raw_):
+            X_array = [est.transform(X_raw) for est in self.estimators_]  ## space inefficient
+        else :
+            X_array = [X_raw for est in self.estimators_]
+        X_meta = self._make_meta(X_array)
         return self.meta_estimator_.predict_proba(X_meta)
 
 

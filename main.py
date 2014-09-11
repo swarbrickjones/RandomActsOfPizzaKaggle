@@ -1,10 +1,13 @@
 from pandas.io.json import read_json
 import numpy as np
+from stacking import Stacking
 from sklearn.metrics import roc_curve, auc
 from nlp import NLPClassifier
 from sklearn.cross_validation import StratifiedKFold
 from sklearn import ensemble
 from feature_engineering import NLPEngineer, MetadataEngineer, RawDataClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn import cross_validation
 
 #resource.setrlimit(resource.RLIMIT_AS, (10000 * 1048576L, -1L))
 def run():
@@ -20,7 +23,7 @@ def run():
     print 'getting nlp scores'
     
     y_train = train_data_raw["requester_received_pizza"]     
-    nlp_clf_body = RawDataClassifier(NLPClassifier (), NLPEngineer('request_text_edit_aware'))
+    nlp_clf_body = RawDataClassifier(NLPClassifier (), NLPEngineer('request_text_edit_aware', max_features_ = 50))
     
     #nlp_clf_title = RawDataClassifier(NLPClassifier (), NLPEngineer('request_title', max_features_ = 1000))
     #nlp_clf_title.fit(train_data_raw, y_train)    
@@ -30,8 +33,15 @@ def run():
     print 'getting meta data scores'
     
     gbc = ensemble.GradientBoostingClassifier(n_estimators = 30)
-    metadata_clf = RawDataClassifier(gbc, MetadataEngineer())    
+    metadata_clf = RawDataClassifier(gbc, MetadataEngineer())  
     
+    estimators = [nlp_clf_body, metadata_clf]
+    skf = list(cross_validation.StratifiedKFold(y_train, 10))
+    stacking = Stacking(LogisticRegression, estimators,
+                 skf, raw = True
+                 )
+    
+    stacking.fit(train_data_raw, y_train)
     
     
 #    cv = StratifiedKFold(y_train, n_folds = 10)
