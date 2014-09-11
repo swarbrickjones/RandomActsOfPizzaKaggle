@@ -202,6 +202,7 @@ class Stacking(object):
         self.cv_ = cv
         self.stackingc_ = stackingc
         self.proba_ = proba
+        self.raw_ = raw
 
         if stackingc:
             if isinstance(meta_estimator, str) or not issubclass(meta_estimator, RegressorMixin):
@@ -266,7 +267,7 @@ class Stacking(object):
         assert_all_finite(pred)
         return pred
 
-    def _make_meta(self, X):
+    def _make_meta(self, X_array):
         """ Make the feature set for the meta (level-1) estimator.
 
         Parameters
@@ -279,7 +280,9 @@ class Stacking(object):
         An n x len(self.estimators_) array of meta-level features.
         """
         rows = []
-        for e in self.estimators_:
+        for index in range(len(self.estimators_)):
+            j,e = self.estimators_[index] 
+            X = X_array[index]
             if self.proba_:
                 # Predict label probabilities
                 pred = self._base_estimator_predict_proba(e, X)
@@ -289,7 +292,7 @@ class Stacking(object):
             rows.append(pred)
         return np.hstack(rows)
 
-    def fit(self, X, y):
+    def fit(self, X_raw, y):
         """ Fit the estimator given predictor(s) X and target y.
 
         Parameters
@@ -300,6 +303,12 @@ class Stacking(object):
         y : array of shape = [n_samples]
             The actual outputs (class data).
         """
+        
+        if(self.raw_):
+            X_array = [est.transform(X_raw) for est in self.estimators_]  ## space inefficient
+        else :
+            X_array = [X_raw for est in self.estimators_]
+        
         # Build meta data.
         X_meta = [] # meta-level features
         y_meta = [] # meta-level labels
@@ -309,16 +318,20 @@ class Stacking(object):
         for i, (a, b) in enumerate(self.cv_):
             print 'Fold [%s]' % (i)
 
-            X_a, X_b = X[a], X[b] # training and validation features
+            X_a_array = [X[a] for X in X_array] # training and validation features
+            X_b_array = [X[b] for X in X_array]
+            
             y_a, y_b = y[a], y[b] # training and validation labels
 
             # Fit each base estimator using the training set for the fold.
-            for j, e in enumerate(self.estimators_):
+            for index in range(len(self.estimators_)):
+                j,e = self.estimators_[index]  
+                X_a = X_a_array[index]
                 print '  Training base (level-0) estimator %d...' % (j),
                 e.fit(X_a, y_a)
                 print 'done.'
 
-            proba = self._make_meta(X_b)
+            proba = self._make_meta(X_b_array)
             X_meta.append(proba)
             y_meta.append(y_b)
         print
