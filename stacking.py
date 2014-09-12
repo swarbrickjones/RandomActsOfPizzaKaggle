@@ -5,10 +5,10 @@
 # Generates a stacking/blending of base models. Cross-validation is used to 
 # generate predictions from base (level-0) models that are used as input to a 
 # combiner (level-1) model.
-
+from sklearn.metrics import roc_curve, auc
 import numpy as np
-from itertools import izip
-from sklearn.grid_search import IterGrid
+#from itertools import izip
+#from sklearn.grid_search import IterGrid
 from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.utils.validation import assert_all_finite
 
@@ -22,30 +22,29 @@ __all__ = [
     'estimator_grid'
 ]
 
-
-def estimator_grid(*args):
-    """Generate candidate estimators from a list of parameter values 
-    on the combination of the various parameter lists given.
-
-    Parameters
-    ----------
-    args : array
-        List of classifiers and corresponding parameters.
-
-    Returns
-    -------
-    result : array
-        The generated estimators.
-    """
-    result = []
-    pairs = izip(args[::2], args[1::2])
-    for estimator, params in pairs:
-        if len(params) == 0:
-            result.append(estimator())
-        else:
-            for p in IterGrid(params):
-                result.append(estimator(**p))
-    return result
+#def estimator_grid(*args):
+#    """Generate candidate estimators from a list of parameter values 
+#    on the combination of the various parameter lists given.
+#
+#    Parameters
+#    ----------
+#    args : array
+#        List of classifiers and corresponding parameters.
+#
+#    Returns
+#    -------
+#    result : array
+#        The generated estimators.
+#    """
+#    result = []
+#    pairs = izip(args[::2], args[1::2])
+#    for estimator, params in pairs:
+#        if len(params) == 0:
+#            result.append(estimator())
+#        else:
+#            for p in IterGrid(params):
+#                result.append(estimator(**p))
+#    return result
 
 
 class MRLR(ClassifierMixin):
@@ -206,20 +205,22 @@ class Stacking(object):
 
         if stackingc:
             if isinstance(meta_estimator, str) or not issubclass(meta_estimator, RegressorMixin):
-                raise Exception('StackingC only works with a regressor.')
+                raise Exception('StackingC only works with a regressor.')                
+        
+        self.meta_estimator_ = meta_estimator(**kwargs)
 
-        if isinstance(meta_estimator, str):
-            if meta_estimator not in ('best',
-                                      'average',
-                                      'vote'):
-                raise Exception('Invalid meta estimator: {0}'.format(meta_estimator))
-            raise Exception('"{0}" meta estimator not implemented'.format(meta_estimator))
-        elif issubclass(meta_estimator, ClassifierMixin):
-            self.meta_estimator_ = meta_estimator(**kwargs)
-        elif issubclass(meta_estimator, RegressorMixin):
-            self.meta_estimator_ = MRLR(meta_estimator, stackingc, **kwargs)
-        else:
-            raise Exception('Invalid meta estimator: {0}'.format(meta_estimator))
+#        if isinstance(meta_estimator, str):
+#            if meta_estimator not in ('best',
+#                                      'average',
+#                                      'vote'):
+#                raise Exception('Invalid meta estimator: {0}'.format(meta_estimator))
+#            raise Exception('"{0}" meta estimator not implemented'.format(meta_estimator))
+#        elif issubclass(meta_estimator, ClassifierMixin):
+#            self.meta_estimator_ = meta_estimator(**kwargs)
+#        elif issubclass(meta_estimator, RegressorMixin):
+#            self.meta_estimator_ = MRLR(meta_estimator, stackingc, **kwargs)
+#        else:
+#            raise Exception('Invalid meta estimator: {0}'.format(meta_estimator))
 
     def _base_estimator_predict(self, e, X):
         """ Predict label values with the specified estimator on 
@@ -263,6 +264,7 @@ class Stacking(object):
             specified estimator for each fold for each instance X.
         """
         # Generate array for the base-level testing set, which is n x n_folds.
+       
         pred = e.predict_proba(X)
         assert_all_finite(pred)
         return pred
@@ -283,8 +285,9 @@ class Stacking(object):
         for index in range(len(self.estimators_)):
             e = self.estimators_[index] 
             X = X_array[index]
+            
             if self.proba_:
-                # Predict label probabilities
+                # Predict label probabilities                
                 pred = self._base_estimator_predict_proba(e, X)
             else:
                 # Predict label values
@@ -292,7 +295,7 @@ class Stacking(object):
             rows.append(pred)
         return np.hstack(rows)
 
-    def fit(self, X_raw, y):
+    def fit(self, X_array, y):
         """ Fit the estimator given predictor(s) X and target y.
 
         Parameters
@@ -303,12 +306,7 @@ class Stacking(object):
         y : array of shape = [n_samples]
             The actual outputs (class data).
         """
-        
-        if(self.raw_):
-            X_array = [est.transform(X_raw) for est in self.estimators_]  ## space inefficient
-        else :
-            X_array = [X_raw for est in self.estimators_]
-        
+               
         # Build meta data.
         X_meta = [] # meta-level features
         y_meta = [] # meta-level labels
@@ -329,6 +327,14 @@ class Stacking(object):
                 X_a = X_a_array[index]
                 print '  Training base (level-0) estimator...',
                 e.fit(X_a, y_a)
+                X_b = X_b_array[index]
+                y_predb = e.predict_proba(X_b)[:, 1]
+                # Compute ROC curve and area the curve
+                fpr, tpr, thresholds = roc_curve(y[b], y_predb)
+                roc_auc = auc(fpr, tpr)
+                print 'fold auc : ' ,
+                print roc_auc ,
+                #print(str(roc_auc))
                 print 'done.'
 
             proba = self._make_meta(X_b_array)
@@ -347,13 +353,15 @@ class Stacking(object):
         self.meta_estimator_.fit(X_meta, y_meta)
         print 'done.'
 
-        # Re-train base estimators on full data.
-        for j, e in enumerate(self.estimators_):
-            print 'Re-training base (level-0) estimator %d on full data...' % (j),
+        # Re-train base estimators on full data.        
+        for index in range(len(self.estimators_)):
+            e = self.estimators_[index]
+            X = X_array[index]        
+            print 'Re-training base (level-0) estimator %d on full data...' % (index),
             e.fit(X, y)
             print 'done.'
 
-    def predict(self, X_raw):
+    def predict(self, X_array):
         """ Predict label values with the fitted estimator on 
         predictor(s) X.
 
@@ -362,14 +370,11 @@ class Stacking(object):
         array of shape = [n_samples]
             The predicted label values of the input samples.
         """
-        if(self.raw_):
-            X_array = [est.transform(X_raw) for est in self.estimators_]  ## space inefficient
-        else :
-            X_array = [X_raw for est in self.estimators_]
+        
         X_meta = self._make_meta(X_array)
         return self.meta_estimator_.predict(X_meta)
 
-    def predict_proba(self, X_raw):
+    def predict_proba(self, X_array):
         """ Predict label probabilities with the fitted estimator 
         on predictor(s) X.
 
@@ -377,12 +382,7 @@ class Stacking(object):
         -------
         array of shape = [n_samples]
             The predicted label probabilities of the input samples.
-        """
-        
-        if(self.raw_):
-            X_array = [est.transform(X_raw) for est in self.estimators_]  ## space inefficient
-        else :
-            X_array = [X_raw for est in self.estimators_]
+        """        
         X_meta = self._make_meta(X_array)
         return self.meta_estimator_.predict_proba(X_meta)
 

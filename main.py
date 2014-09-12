@@ -5,7 +5,7 @@ from sklearn.metrics import roc_curve, auc
 from nlp import NLPClassifier
 from sklearn.cross_validation import StratifiedKFold
 from sklearn import ensemble
-from feature_engineering import NLPEngineer, MetadataEngineer, RawDataClassifier
+from feature_engineering import NLPEngineer, MetadataEngineer
 from sklearn.linear_model import LogisticRegression
 from sklearn import cross_validation
 
@@ -23,7 +23,6 @@ def run():
     print 'getting nlp scores'
     
     y_train = train_data_raw["requester_received_pizza"]     
-    nlp_clf_body = RawDataClassifier(NLPClassifier (), NLPEngineer('request_text_edit_aware', max_features_ = 50))
     
     #nlp_clf_title = RawDataClassifier(NLPClassifier (), NLPEngineer('request_title', max_features_ = 1000))
     #nlp_clf_title.fit(train_data_raw, y_train)    
@@ -32,44 +31,39 @@ def run():
     
     print 'getting meta data scores'
     
-    gbc = ensemble.GradientBoostingClassifier(n_estimators = 30)
-    metadata_clf = RawDataClassifier(gbc, MetadataEngineer())  
+    meta_clf = ensemble.GradientBoostingClassifier(n_estimators = 30)
+    nlp_clf = NLPClassifier ()
+    nlp_clf2 = NLPClassifier ()
+    estimators = [meta_clf, nlp_clf,nlp_clf2]
+ 
+    meta_engineer = MetadataEngineer()
+    X_meta_train = meta_engineer.transform(train_data_raw)
     
-    estimators = [nlp_clf_body, metadata_clf]
+    nlp_engineer = NLPEngineer('request_text_edit_aware', max_features_ = 5000)
+    X_nlp_train = nlp_engineer.transform(train_data_raw)
+    
+    nlp_engineer2 = NLPEngineer('request_title', max_features_ = 5000)
+    X_nlp_train2 = nlp_engineer2.transform(train_data_raw)
+    
+    input_train = [X_meta_train,X_nlp_train,X_nlp_train2]
+    
     skf = list(cross_validation.StratifiedKFold(y_train, 10))
     stacking = Stacking(LogisticRegression, estimators,
                  skf, raw = True
                  )
     
-    stacking.fit(train_data_raw, y_train)
+    stacking.fit(input_train, y_train)
     
-    
-#    cv = StratifiedKFold(y_train, n_folds = 10)
-#    auc_list = []
-#    for i, (train, test) in enumerate(cv):
-#        metadata_clf.fit(train_data_raw.iloc[train], y_train[train])
-#        nlp_clf_body.fit(train_data_raw.iloc[train], y_train[train])
-#        #nlp_clf_title.fit(train_data_raw.iloc[train], y_train[train])
-#        proba_meta = metadata_clf.predict_proba(train_data_raw.iloc[test])
-#        proba_nlp_body = nlp_clf_body.predict_proba(train_data_raw.iloc[test])
-#        #proba_nlp_title = nlp_clf_title.predict_proba(train_data_raw.iloc[test])
-#        y_test_pred =np.add( proba_meta[:, 1], proba_nlp_body[:, 1])
-#        # Compute ROC curve and area the curve
-#        fpr, tpr, thresholds = roc_curve(y_train[test], y_test_pred)
-#        roc_auc = auc(fpr, tpr)
-#        #print(str(roc_auc))
-#        auc_list.append(roc_auc)
-#        print(str(roc_auc))
-#    cross_fold_mean = np.mean(auc_list)
-#    print 'mean auc : ' , cross_fold_mean
-    
-    nlp_clf_body.fit(train_data_raw, y_train)
-    proba_nlp = nlp_clf_body.predict_proba(test_data_raw)
-    metadata_clf.fit(train_data_raw, y_train)    
-    proba_metadata = metadata_clf.predict_proba(test_data_raw)    
-    y_test_pred =np.add( proba_nlp[:, 1], proba_metadata[:, 1])   
+    X_meta_test = meta_engineer.transform(test_data_raw)  
+    X_nlp_test = nlp_engineer.transform(test_data_raw)
+    X_nlp_test2 = nlp_engineer2.transform(test_data_raw)    
+    input_test = [X_meta_test,X_nlp_test,X_nlp_test2]    
+            
+    y_test_pred = stacking.predict_proba(input_test)[:, 1]
     
     test_ids=test_data_raw['request_id']    
+
+    print 'writing to file'    
     
     fcsv = open('raop_prediction.csv','w')
     fcsv.write("request_id,requester_received_pizza\n")

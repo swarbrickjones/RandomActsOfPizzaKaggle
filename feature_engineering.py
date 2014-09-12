@@ -4,25 +4,6 @@ from sklearn.preprocessing import OneHotEncoder
 from datetime import datetime
 import abc
 
-class RawDataClassifier(object):    
-    def __init__(self,classifier_, feature_engineer_):
-        self.feature_engineer = feature_engineer_
-        self.classifier = classifier_
-
-    def transform(self, X) :
-        return self.feature_engineer.transform(X)
-
-    def fit(self, X, y):        
-        self.classifier.fit(X, y)        
-        return         
-
-    def predict(self, X):        
-        return self.classifier.predict(X) 
-    
-
-    def predict_proba(self, X):        
-        return self.classifier.predict_proba(X) 
-
 class Feature_Engineerer(object):
     __metaclass__ = abc.ABCMeta
 
